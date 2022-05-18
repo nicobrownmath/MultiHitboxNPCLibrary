@@ -1,0 +1,3 @@
+displayName = Multihitbox NPC Library
+author = turingcomplete30
+version = 0.1
