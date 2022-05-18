@@ -22,7 +22,7 @@ using Terraria.GameContent;
 
 namespace MultiHitboxNPCLibrary
 {
-    //Javelins and other sticky projectiles break with MultiHitboxNPCs
+    //TODO: Javelins and other sticky projectiles break with MultiHitboxNPCs
     //I don't really see how to fix this one without a full rewrite of Javelin code
     //This doesn't have much impact on their functionality so it's not a major issue, but I would like to fix it at some point
     //TODO: Produce hit sound from the place where we were hit, death sound from (real center? the closest center to the player?)
