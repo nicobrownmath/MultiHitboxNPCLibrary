@@ -49,7 +49,8 @@ namespace MultiHitboxNPCLibrary
         public Rectangle hitbox; //the hitbox rectangle
         public int index; //our index in the overall multiHitbox
 
-        public Vector2 velocity; //velocity for the purposes of knockback TODO: player and enemy knockback, actually calculate and store this
+        public bool canDamage;//can we hit stuff //TODO: Make this adjustable and also work
+        public bool canBeDamaged; //can we be hit by stuff //TODO: Make this adjustable and also work
 
         public override int HitboxCount => 1;
 
@@ -123,7 +124,7 @@ namespace MultiHitboxNPCLibrary
             _hitboxCount = 0;
         }
 
-        public static ANPCHitbox AutoAssignFrom(List<Rectangle> rectangles, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
+        public static ANPCHitbox CreateFrom(List<Rectangle> rectangles, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
         {
             switch (assignmentMode)
             {

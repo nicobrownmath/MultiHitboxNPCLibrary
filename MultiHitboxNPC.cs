@@ -29,7 +29,6 @@ namespace MultiHitboxNPCLibrary
     //This doesn't have much impact on their functionality so it's not a major issue, but I would like to fix it at some point
     //TODO: Produce death sound from (real center? the closest center to the player?)
     //TODO: Mouse hovering
-    //TODO: Directional knockback (store velocities)
     //TODO: Multiplayer syncing
     //TODO: Possibly make effects like spectre healing come from the hit segment
     public class MultiHitboxNPC : GlobalNPC
@@ -42,6 +41,11 @@ namespace MultiHitboxNPCLibrary
 
         public int widthForInteractions;
         public int heightForInteractions;
+
+        Vector2 preModifyDataCenter;
+        int preModifyDataWidth;
+        int preModifyDataHeight;
+        bool doDataReset;
 
         public bool doDebugDraws;
 
@@ -63,6 +67,8 @@ namespace MultiHitboxNPCLibrary
             IL.Terraria.GameContent.Shaders.WaterShaderData.DrawWaves += WaterShaderData_DrawWaves;
             IL.Terraria.NPC.UpdateNPC_Inner += NPC_UpdateNPC_Inner;
             IL.Terraria.Item.GetPickedUpByMonsters += Item_GetPickedUpByMonsters;
+            IL.Terraria.NPC.BeHurtByOtherNPC += NPC_BeHurtByOtherNPC;
+            IL.Terraria.Player.Update_NPCCollision += Player_Update_NPCCollision;
         }
 
         //checks if the point is in the rectangle, including boundary points
@@ -196,10 +202,97 @@ namespace MultiHitboxNPCLibrary
             });
         }
 
-        Vector2 preModifyDataCenter;
-        int preModifyDataWidth;
-        int preModifyDataHeight;
-        bool doDataReset;
+        //adjusts knockback for players
+        private void Player_Update_NPCCollision(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            if (!c.TryGotoNext(MoveType.After,
+                i => i.MatchLdcI4(-1),
+                i => i.MatchStloc(10),
+                i => i.MatchLdsfld(typeof(Main).GetField("npc", BindingFlags.Public | BindingFlags.Static)),
+                i => i.MatchLdloc(1),
+                i => i.MatchLdelemRef(),
+                i => i.MatchLdflda(typeof(Entity).GetField("position", BindingFlags.Public | BindingFlags.Instance)),
+                i => i.MatchLdfld(typeof(Vector2).GetField("X", BindingFlags.Public | BindingFlags.Instance)),
+                i => i.MatchLdsfld(typeof(Main).GetField("npc", BindingFlags.Public | BindingFlags.Static)),
+                i => i.MatchLdloc(1),
+                i => i.MatchLdelemRef(),
+                i => i.MatchLdfld(typeof(Entity).GetField("width", BindingFlags.Public | BindingFlags.Instance)),
+                i => i.MatchLdcI4(2),
+                i => i.MatchDiv(),
+                i => i.MatchConvR4(),
+                i => i.MatchAdd()
+                ))
+            {
+                GetInstance<MultiHitboxNPCLibrary>().Logger.Debug("Failed to find patch location");
+                return;
+            }
+
+            //replaces the value with our better value if needed
+            c.Emit(OpCodes.Ldsfld, typeof(Main).GetField("npc", BindingFlags.Public | BindingFlags.Static));
+            c.Emit(OpCodes.Ldloc, 1);
+            c.Emit(OpCodes.Ldelem_Ref);
+            c.EmitDelegate<Func<float, NPC, float>>((defaultValue, npc) =>
+            {
+                if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox) && multiHitbox.useMultipleHitboxes)
+                {
+                    return multiHitbox.mostRecentHitbox.hitbox.Center.X;
+                }
+                return defaultValue;
+            });
+        }
+
+        //adjusts knockback for npcs
+        private void NPC_BeHurtByOtherNPC(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            if (!c.TryGotoNext(MoveType.After,
+                i => i.MatchLdarg(2),
+                i => i.MatchCallvirt(typeof(Entity).GetProperty("Center", BindingFlags.Public | BindingFlags.Instance).GetGetMethod()),
+                i => i.MatchLdfld(typeof(Vector2).GetField("X", BindingFlags.Public | BindingFlags.Instance)),
+                i => i.MatchLdarg(0),
+                i => i.MatchCall(typeof(Entity).GetProperty("Center", BindingFlags.Public | BindingFlags.Instance).GetGetMethod()),
+                i => i.MatchLdfld(typeof(Vector2).GetField("X", BindingFlags.Public | BindingFlags.Instance)),
+                i => i.MatchBleUn(out _),
+                i => i.MatchLdcI4(-1),
+                i => i.MatchBr(out _),
+                i => i.MatchLdcI4(1),
+                i => i.MatchStloc(3)
+                ))
+            {
+                GetInstance<MultiHitboxNPCLibrary>().Logger.Debug("Failed to find patch location");
+                return;
+            }
+
+            c.Emit(OpCodes.Ldarg, 2);
+            c.Emit(OpCodes.Ldarg, 0);
+            c.Emit(OpCodes.Ldloc, 3);
+            c.EmitDelegate<Func<NPC, NPC, int, int>>((targetNpc, npc, defaultValue) =>
+            {
+                MultiHitboxNPC multiHitbox;
+                MultiHitboxNPC targetMultiHitbox;
+                if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox) && multiHitbox.useMultipleHitboxes)
+                {
+                    if (targetNpc.TryGetGlobalNPC<MultiHitboxNPC>(out targetMultiHitbox) && targetMultiHitbox.useMultipleHitboxes)
+                    {
+                        //both are multiHitboxNPCs
+                        return ((!(targetMultiHitbox.mostRecentHitbox.hitbox.Center.X > multiHitbox.mostRecentHitbox.hitbox.Center.X)) ? 1 : (-1));
+                    }
+                    //npc is a multiHitboxNPC
+                    return ((!(targetNpc.Center.X > multiHitbox.mostRecentHitbox.hitbox.Center.X)) ? 1 : (-1));
+                }
+                else if (targetNpc.TryGetGlobalNPC<MultiHitboxNPC>(out targetMultiHitbox) && targetMultiHitbox.useMultipleHitboxes)
+                {
+                    //target is a multiHitboxNPC
+                    return ((!(targetMultiHitbox.mostRecentHitbox.hitbox.Center.X > npc.Center.X)) ? 1 : (-1));
+                }
+                return defaultValue;
+            });
+            c.Emit(OpCodes.Stloc, 3);
+        }
+
         private void WaterShaderData_DrawWaves(ILContext il)
         {
             ILCursor c = new ILCursor(il);
@@ -658,6 +751,28 @@ namespace MultiHitboxNPCLibrary
                 //store hitbox data to be restored after special interactions
                 preModifyDataWidth = npc.width;
                 preModifyDataHeight = npc.height;
+            }
+        }
+
+        public void AssignHitboxFrom(List<Rectangle> rectangles, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
+        {
+            if (rectangles == null)
+            {
+                hitboxes = null;
+                return;
+            }
+
+            if (hitboxes == null || hitboxes.HitboxCount != rectangles.Count)
+            {
+                hitboxes = MultiHitbox.CreateFrom(rectangles, assignmentMode);
+            }
+            else
+            {
+                for (int i = 0; i < Math.Min(hitboxes.HitboxCount, rectangles.Count); i++)
+                {
+                    RectangleHitbox rectangleHitbox = hitboxes.GetHitbox(i);
+                    rectangleHitbox.hitbox = rectangles[i];
+                }
             }
         }
 
