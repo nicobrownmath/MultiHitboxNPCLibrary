@@ -6,6 +6,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.GameContent;
 using Terraria.ModLoader;
+using Terraria.Utilities;
 
 namespace MultiHitboxNPCLibrary
 {
@@ -13,6 +14,8 @@ namespace MultiHitboxNPCLibrary
     {
         //TODO: Update this with a way to get segment data
         public abstract bool Colliding(NPC npc, Func<Rectangle, bool> collisionCheck);
+
+        public virtual int HitboxCount { get; } //counts the total number of AABB hitboxes
 
 		public abstract Rectangle BoundingBox();
 
@@ -30,6 +33,14 @@ namespace MultiHitboxNPCLibrary
             Rectangle hitbox = BoundingBox();
             spriteBatch.Draw(TextureAssets.MagicPixel.Value, new Rectangle(hitbox.X - (int)screenPos.X, hitbox.Y - (int)screenPos.Y, hitbox.Width, hitbox.Height), drawColor);
         }
+
+        public abstract RectangleHitbox GetHitbox(int index);
+
+        //for use with coins
+        public virtual RectangleHitbox GetRandomHitbox(UnifiedRandom random)
+        {
+            return GetHitbox(random.Next(HitboxCount));
+        }
     }
 
     //a basic rectangle hitbox
@@ -39,6 +50,8 @@ namespace MultiHitboxNPCLibrary
         public int index; //our index in the overall multiHitbox
 
         public Vector2 velocity; //velocity for the purposes of knockback TODO: player and enemy knockback, actually calculate and store this
+
+        public override int HitboxCount => 1;
 
         public RectangleHitbox(Rectangle hitbox, int index)
         {
@@ -77,6 +90,11 @@ namespace MultiHitboxNPCLibrary
         {
             return new HashSet<RectangleHitbox>() { this };
         }
+
+        public override RectangleHitbox GetHitbox(int index)
+        {
+            return this;
+        }
     }
 
     public interface IMultiHitboxSegmentUpdate
@@ -96,9 +114,13 @@ namespace MultiHitboxNPCLibrary
     {
         public List<ANPCHitbox> hitboxes;
 
+        int _hitboxCount;
+        public override int HitboxCount => _hitboxCount;
+
         public MultiHitbox()
         {
             hitboxes = new List<ANPCHitbox>();
+            _hitboxCount = 0;
         }
 
         public static ANPCHitbox AutoAssignFrom(List<Rectangle> rectangles, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
@@ -151,6 +173,11 @@ namespace MultiHitboxNPCLibrary
         public MultiHitbox(List<ANPCHitbox> hitboxes)
         {
             this.hitboxes = hitboxes;
+            _hitboxCount = 0;
+            foreach (ANPCHitbox hitbox in hitboxes)
+            {
+                _hitboxCount += hitbox.HitboxCount;
+            }
         }
 
         public override Rectangle BoundingBox()
@@ -197,6 +224,20 @@ namespace MultiHitboxNPCLibrary
             {
                 subHitbox.Draw(spriteBatch, screenPos, drawColor);
             }
+        }
+
+        public override RectangleHitbox GetHitbox(int index)
+        {
+            int targetIndex = 0;
+            foreach (ANPCHitbox subHitbox in hitboxes)
+            {
+                if (index - targetIndex < subHitbox.HitboxCount)
+                {
+                    return subHitbox.GetHitbox(index - targetIndex);
+                }
+                targetIndex += subHitbox.HitboxCount;
+            }
+            throw new IndexOutOfRangeException();
         }
     }
 }
