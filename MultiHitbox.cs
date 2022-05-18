@@ -12,17 +12,18 @@ namespace MultiHitboxNPCLibrary
 {
 	public abstract class ANPCHitbox
     {
-        //TODO: Update this with a way to get segment data
-        public abstract bool Colliding(NPC npc, Func<Rectangle, bool> collisionCheck);
+        public abstract bool Colliding(NPC npc, Func<ANPCHitbox, bool> collisionCheck);
 
         public virtual int HitboxCount { get; } //counts the total number of AABB hitboxes
 
-		public abstract Rectangle BoundingBox();
+        public Rectangle BoundingHitbox;
+
+        public bool canDamage;
+        public bool canBeDamaged;
 
         public Point InflationFrom(Vector2 center)
         {
-            Rectangle boundingBox = BoundingBox();
-            return new Point((int)Math.Max(center.X - boundingBox.Left, boundingBox.Right - center.X), (int)Math.Max(center.Y - boundingBox.Top, boundingBox.Bottom - center.Y));
+            return new Point((int)Math.Max(center.X - BoundingHitbox.Left, BoundingHitbox.Right - center.X), (int)Math.Max(center.Y - BoundingHitbox.Top, BoundingHitbox.Bottom - center.Y));
         }
 
         public abstract ICollection<RectangleHitbox> AllHitboxes(); //returns a collection of all low-level hitboxes for the purposes of random segment drops
@@ -30,8 +31,7 @@ namespace MultiHitboxNPCLibrary
         //draw method is meant for debugging
         public virtual void Draw(SpriteBatch spriteBatch, Vector2 screenPos, Color drawColor)
         {
-            Rectangle hitbox = BoundingBox();
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, new Rectangle(hitbox.X - (int)screenPos.X, hitbox.Y - (int)screenPos.Y, hitbox.Width, hitbox.Height), drawColor);
+            spriteBatch.Draw(TextureAssets.MagicPixel.Value, new Rectangle(BoundingHitbox.X - (int)screenPos.X, BoundingHitbox.Y - (int)screenPos.Y, BoundingHitbox.Width, BoundingHitbox.Height), drawColor);
         }
 
         public abstract RectangleHitbox GetHitbox(int index);
@@ -41,33 +41,34 @@ namespace MultiHitboxNPCLibrary
         {
             return GetHitbox(random.Next(HitboxCount));
         }
+
+        public abstract void Refresh();
     }
 
-    //a basic rectangle hitbox
+    //a basic rectangle hitbox, used as a component of all other hitboxes
     public class RectangleHitbox : ANPCHitbox
     {
         public Rectangle hitbox; //the hitbox rectangle
         public int index; //our index in the overall multiHitbox
 
-        public bool canDamage;//can we hit stuff //TODO: Make this adjustable and also work
-        public bool canBeDamaged; //can we be hit by stuff //TODO: Make this adjustable and also work
-
         public override int HitboxCount => 1;
 
-        public RectangleHitbox(Rectangle hitbox, int index)
+        public RectangleHitbox(Rectangle hitbox, bool canDamage, bool canBeDamaged, int index)
         {
             this.hitbox = hitbox;
+            this.canDamage = canDamage;
+            this.canBeDamaged = canBeDamaged;
             this.index = index;
         }
 
-        public override Rectangle BoundingBox()
+        public override void Refresh()
         {
-            return hitbox;
+            BoundingHitbox = hitbox;
         }
 
-        public override bool Colliding(NPC npc, Func<Rectangle, bool> collisionCheck)
+        public override bool Colliding(NPC npc, Func<ANPCHitbox, bool> collisionCheck)
         {
-            if (collisionCheck.Invoke(hitbox))
+            if (collisionCheck.Invoke(this))
             {
                 npc.GetGlobalNPC<MultiHitboxNPC>().mostRecentHitbox = this;
 
@@ -103,6 +104,20 @@ namespace MultiHitboxNPCLibrary
         public void MultiHitboxSegmentUpdate(NPC npc, RectangleHitbox mostRecentHitbox);
     }
 
+    public struct RectangleHitboxData
+    {
+        public Rectangle? Hitbox { get; private set; }
+        public bool? CanDamage { get; private set; }
+        public bool? CanBeDamaged { get; private set; }
+
+        public RectangleHitboxData(Rectangle? hitbox = null, bool? canDamage = null, bool? canBeDamaged = null)
+        {
+            Hitbox = hitbox;
+            CanDamage = canDamage;
+            CanBeDamaged = canBeDamaged;
+        }
+    }
+
     public enum MultiHitboxAssignmentMode
     {
         Basic,
@@ -118,13 +133,21 @@ namespace MultiHitboxNPCLibrary
         int _hitboxCount;
         public override int HitboxCount => _hitboxCount;
 
-        public MultiHitbox()
+        public MultiHitbox(List<ANPCHitbox> hitboxes)
         {
-            hitboxes = new List<ANPCHitbox>();
+            this.hitboxes = hitboxes;
+            canDamage = false;
+            canBeDamaged = false;
             _hitboxCount = 0;
+            foreach (ANPCHitbox hitbox in hitboxes)
+            {
+                _hitboxCount += hitbox.HitboxCount;
+                if (hitbox.canDamage) canDamage = true;
+                if (hitbox.canBeDamaged) canBeDamaged = true;
+            }
         }
 
-        public static ANPCHitbox CreateFrom(List<Rectangle> rectangles, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
+        public static ANPCHitbox CreateFrom(List<RectangleHitboxData> hitboxDatas, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
         {
             switch (assignmentMode)
             {
@@ -132,9 +155,10 @@ namespace MultiHitboxNPCLibrary
                     {
                         List<ANPCHitbox> hitboxes = new List<ANPCHitbox>();
                         int index = 0;
-                        foreach (Rectangle rectangle in rectangles)
+                        foreach (RectangleHitboxData hitboxData in hitboxDatas)
                         {
-                            hitboxes.Add(new RectangleHitbox(rectangle, index));
+                            //these damage things and can be hit by default
+                            hitboxes.Add(new RectangleHitbox(hitboxData.Hitbox ?? default(Rectangle), hitboxData.CanDamage ?? true, hitboxData.CanBeDamaged ?? true, index));
                             index++;
                         }
                         return new MultiHitbox(hitboxes);
@@ -142,13 +166,13 @@ namespace MultiHitboxNPCLibrary
                 case MultiHitboxAssignmentMode.Nested:
                     {
                         int index = 0;
-                        return NestedHitboxFrom(rectangles, rectangles.Count, ref index);
+                        return NestedHitboxFrom(hitboxDatas, hitboxDatas.Count, ref index);
                     }
             }
             return null; //how did we get here
         }
 
-        static ANPCHitbox NestedHitboxFrom(List<Rectangle> rectangles, int maxDepthToReach, ref int index)
+        static ANPCHitbox NestedHitboxFrom(List<RectangleHitboxData> hitboxDatas, int maxDepthToReach, ref int index)
         {
             if (maxDepthToReach == 0)
             {
@@ -157,7 +181,7 @@ namespace MultiHitboxNPCLibrary
 
             if (maxDepthToReach == 1)
             {
-                RectangleHitbox output = new RectangleHitbox(rectangles[index], index);
+                RectangleHitbox output = new RectangleHitbox(hitboxDatas[index].Hitbox ?? default(Rectangle), hitboxDatas[index].CanDamage ?? true, hitboxDatas[index].CanBeDamaged ?? true, index);
                 index++;
                 return output;
             }
@@ -165,43 +189,41 @@ namespace MultiHitboxNPCLibrary
             List<ANPCHitbox> hitboxes = new List<ANPCHitbox>();
             for (int i = 0; i < 2; i++)
             {
-                if (index < rectangles.Count)
-                    hitboxes.Add(NestedHitboxFrom(rectangles, (maxDepthToReach + 1) / 2, ref index));
+                if (index < hitboxDatas.Count)
+                    hitboxes.Add(NestedHitboxFrom(hitboxDatas, (maxDepthToReach + 1) / 2, ref index));
             }
             return new MultiHitbox(hitboxes);
         }
 
-        public MultiHitbox(List<ANPCHitbox> hitboxes)
+        public override void Refresh()
         {
-            this.hitboxes = hitboxes;
-            _hitboxCount = 0;
-            foreach (ANPCHitbox hitbox in hitboxes)
-            {
-                _hitboxCount += hitbox.HitboxCount;
-            }
-        }
+            canDamage = false;
+            canBeDamaged = false;
 
-        public override Rectangle BoundingBox()
-        {
             float left = float.MaxValue;
             float right = float.MinValue;
             float top = float.MaxValue;
             float bottom = float.MinValue;
             foreach (ANPCHitbox subHitbox in hitboxes)
             {
-                Rectangle subBoundingBox = subHitbox.BoundingBox();
+                subHitbox.Refresh();
+
+                if (subHitbox.canDamage) canDamage = true;
+                if (subHitbox.canBeDamaged) canBeDamaged = true;
+
+                Rectangle subBoundingBox = subHitbox.BoundingHitbox;
                 if (subBoundingBox.Left < left) left = subBoundingBox.Left;
                 if (subBoundingBox.Right > right) right = subBoundingBox.Right;
                 if (subBoundingBox.Top < top) top = subBoundingBox.Top;
                 if (subBoundingBox.Bottom > bottom) bottom = subBoundingBox.Bottom;
             }
 
-            return new Rectangle((int)Math.Floor(left), (int)Math.Floor(top), (int)Math.Ceiling(right) - (int)Math.Floor(left), (int)Math.Ceiling(bottom) - (int)Math.Floor(top));
+            BoundingHitbox = new Rectangle((int)Math.Floor(left), (int)Math.Floor(top), (int)Math.Ceiling(right) - (int)Math.Floor(left), (int)Math.Ceiling(bottom) - (int)Math.Floor(top));
         }
 
-        public override bool Colliding(NPC npc, Func<Rectangle, bool> collisionCheck)
+        public override bool Colliding(NPC npc, Func<ANPCHitbox, bool> collisionCheck)
         {
-            if (!collisionCheck.Invoke(BoundingBox())) return false;
+            if (!collisionCheck.Invoke(this)) return false;
             foreach (ANPCHitbox subHitbox in hitboxes)
             {
                 if (subHitbox.Colliding(npc, collisionCheck)) return true;

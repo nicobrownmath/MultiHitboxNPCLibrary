@@ -49,6 +49,7 @@ namespace MultiHitboxNPCLibrary
 
         public bool doDebugDraws;
 
+        #region Loading & Patches
         public override void Load()
         {
             On.Terraria.Collision.CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle += Collision_CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle;
@@ -85,6 +86,7 @@ namespace MultiHitboxNPCLibrary
             else return false;
         }
 
+        //adjusts tile collision to only use the default hitbox
         private void NPC_UpdateCollision(On.Terraria.NPC.orig_UpdateCollision orig, NPC self)
         {
             MultiHitboxNPC multiHitbox;
@@ -116,6 +118,7 @@ namespace MultiHitboxNPCLibrary
             }
         }
 
+        //adjusts buff effects to show up from the main npc
         private void NPC_UpdateNPC_BuffApplyVFX(On.Terraria.NPC.orig_UpdateNPC_BuffApplyVFX orig, NPC self)
         {
             orig(self);
@@ -131,7 +134,6 @@ namespace MultiHitboxNPCLibrary
                     self.Center = oldCenter;
                 }
         }
-
         private void NPC_UpdateNPC_BuffSetFlags(On.Terraria.NPC.orig_UpdateNPC_BuffSetFlags orig, NPC self, bool lowerBuffTime)
         {
             MultiHitboxNPC multiHitbox;
@@ -200,6 +202,38 @@ namespace MultiHitboxNPCLibrary
                         npc.Center = multiHitbox.preModifyDataCenter;
                     }
             });
+        }
+
+        //adjusts coin pickup availability
+        private void Item_GetPickedUpByMonsters(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            ILLabel label = null;
+
+            if (!c.TryGotoNext(MoveType.After,
+                i => i.MatchLdloca(0),
+                i => i.MatchLdloc(6),
+                i => i.MatchCall(typeof(Rectangle).GetMethod("Intersects", BindingFlags.Instance | BindingFlags.Public, new Type[] { typeof(Rectangle) })),
+                i => i.MatchBrfalse(out label)
+                ))
+            {
+                GetInstance<MultiHitboxNPCLibrary>().Logger.Debug("Failed to find patch location");
+                return;
+            }
+
+            c.Emit(OpCodes.Ldloc, 0);
+            c.Emit(OpCodes.Ldsfld, typeof(Main).GetField("npc", BindingFlags.Static | BindingFlags.Public));
+            c.Emit(OpCodes.Ldloc, 1);
+            c.Emit(OpCodes.Ldelem_Ref);
+            c.EmitDelegate<Func<Rectangle, NPC, bool>>((itemHitbox, npc) =>
+            {
+                MultiHitboxNPC multiHitbox;
+                if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
+                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, itemHitbox);
+                return true;
+            });
+            c.Emit(OpCodes.Brfalse, label);
         }
 
         //adjusts knockback for players
@@ -293,6 +327,7 @@ namespace MultiHitboxNPCLibrary
             c.Emit(OpCodes.Stloc, 3);
         }
 
+        //adjusts wave drawing
         private void WaterShaderData_DrawWaves(ILContext il)
         {
             ILCursor c = new ILCursor(il);
@@ -357,6 +392,7 @@ namespace MultiHitboxNPCLibrary
             });
         }
 
+        //adjusts on hit effects (damage numbers and hit sounds)
         private double NPC_StrikeNPC(On.Terraria.NPC.orig_StrikeNPC orig, NPC self, int Damage, float knockBack, int hitDirection, bool crit, bool noEffect, bool fromNet)
         {
             MultiHitboxNPC multiHitbox;
@@ -417,38 +453,7 @@ namespace MultiHitboxNPCLibrary
             {
                 MultiHitboxNPC multiHitbox;
                 if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
-                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, playerHitbox);
-                return true;
-            });
-            c.Emit(OpCodes.Brfalse, label);
-        }
-
-        private void Item_GetPickedUpByMonsters(ILContext il)
-        {
-            ILCursor c = new ILCursor(il);
-
-            ILLabel label = null;
-
-            if (!c.TryGotoNext(MoveType.After,
-                i => i.MatchLdloca(0),
-                i => i.MatchLdloc(6),
-                i => i.MatchCall(typeof(Rectangle).GetMethod("Intersects", BindingFlags.Instance | BindingFlags.Public, new Type[] { typeof(Rectangle) })),
-                i => i.MatchBrfalse(out label)
-                ))
-            {
-                GetInstance<MultiHitboxNPCLibrary>().Logger.Debug("Failed to find patch location");
-                return;
-            }
-
-            c.Emit(OpCodes.Ldloc, 0);
-            c.Emit(OpCodes.Ldsfld, typeof(Main).GetField("npc", BindingFlags.Static | BindingFlags.Public));
-            c.Emit(OpCodes.Ldloc, 1);
-            c.Emit(OpCodes.Ldelem_Ref);
-            c.EmitDelegate<Func<Rectangle, NPC, bool>>((itemHitbox, npc) =>
-            {
-                MultiHitboxNPC multiHitbox;
-                if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
-                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, itemHitbox);
+                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, playerHitbox, needCanDamage: true);
                 return true;
             });
             c.Emit(OpCodes.Brfalse, label);
@@ -488,7 +493,7 @@ namespace MultiHitboxNPCLibrary
             {
                 MultiHitboxNPC multiHitbox;
                 if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
-                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, cartHitbox);
+                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, cartHitbox, needCanBeDamaged: true);
                 return true;
             });
             c.Emit(OpCodes.Brfalse, label);
@@ -502,7 +507,7 @@ namespace MultiHitboxNPCLibrary
                 if (multiHitbox.useMultipleHitboxes)
                 {
                     multiHitbox.hitboxes.Colliding(self, (hitbox) => {
-                        return Collision.LavaCollision(hitbox.TopLeft(), hitbox.Width, hitbox.Height);
+                        return hitbox.canBeDamaged && Collision.LavaCollision(hitbox.BoundingHitbox.TopLeft(), hitbox.BoundingHitbox.Width, hitbox.BoundingHitbox.Height);
                     });
                     return false;
                 }
@@ -536,7 +541,7 @@ namespace MultiHitboxNPCLibrary
             {
                 MultiHitboxNPC multiHitbox;
                 if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
-                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, jumpHitbox);
+                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, jumpHitbox, needCanBeDamaged: true);
                 return true;
             });
             c.Emit(OpCodes.Brfalse, label);
@@ -563,7 +568,7 @@ namespace MultiHitboxNPCLibrary
             {
                 MultiHitboxNPC multiHitbox;
                 if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
-                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, jumpHitbox);
+                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, jumpHitbox, needCanBeDamaged: true);
                 return true;
             });
             c.Emit(OpCodes.Brfalse, label2);
@@ -596,7 +601,7 @@ namespace MultiHitboxNPCLibrary
             {
                 MultiHitboxNPC multiHitbox;
                 if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
-                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, dashHitbox);
+                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, dashHitbox, needCanBeDamaged: true);
                 return true;
             });
             c.Emit(OpCodes.Brfalse, label);
@@ -623,30 +628,32 @@ namespace MultiHitboxNPCLibrary
             {
                 MultiHitboxNPC multiHitbox;
                 if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
-                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, dashHitbox);
+                    return !multiHitbox.useMultipleHitboxes || multiHitbox.CollideRectangle(npc, dashHitbox, needCanBeDamaged: true);
                 return true;
             });
             c.Emit(OpCodes.Brfalse, label2);
         }
 
+        //remember our item hitbox for canbehitbyitem checs
         static Rectangle rememberItemRectangle;
         private void Player_ItemCheck_MeleeHitNPCs(On.Terraria.Player.orig_ItemCheck_MeleeHitNPCs orig, Player self, Item sItem, Rectangle itemRectangle, int originalDamage, float knockBack)
         {
             rememberItemRectangle = itemRectangle;
             orig(self, sItem, itemRectangle, originalDamage, knockBack);
         }
+        #endregion
 
-        public bool CollideRectangle(NPC npc, Rectangle collider)
+        public bool CollideRectangle(NPC npc, Rectangle collider, bool needCanDamage = false, bool needCanBeDamaged = false)
         {
             return hitboxes.Colliding(npc, (hitbox) =>
             {
-                return collider.Intersects(hitbox);
+                return (!needCanBeDamaged || hitbox.canBeDamaged) && (!needCanDamage || hitbox.canDamage) && collider.Intersects(hitbox.BoundingHitbox);
             });
         }
 
         public override bool? CanBeHitByItem(NPC npc, Player player, Item item)
         {
-            if (useMultipleHitboxes && !CollideRectangle(npc, rememberItemRectangle)) return false;
+            if (useMultipleHitboxes && !CollideRectangle(npc, rememberItemRectangle, needCanBeDamaged: true)) return false;
             return null;
         }
 
@@ -654,7 +661,7 @@ namespace MultiHitboxNPCLibrary
         {
             return hitboxes.Colliding(npc, (hitbox) =>
             {
-                return projectile.Colliding(projectileHitbox, hitbox);
+                return hitbox.canBeDamaged && projectile.Colliding(projectileHitbox, hitbox.BoundingHitbox);
             });
         }
 
@@ -666,7 +673,7 @@ namespace MultiHitboxNPCLibrary
 
         public override bool CanHitPlayer(NPC npc, Player target, ref int cooldownSlot)
         {
-            if (useMultipleHitboxes && !CollideRectangle(npc, target.Hitbox)) return false;
+            if (useMultipleHitboxes && !CollideRectangle(npc, target.Hitbox, needCanDamage: true)) return false;
             return true;
         }
 
@@ -680,20 +687,17 @@ namespace MultiHitboxNPCLibrary
                 {
                     if (hitboxes.Colliding(npc, (hitbox) =>
                     {
-                        return targetMultiHitbox.hitboxes.Colliding(target, (targetHitbox) =>
-                        {
-                            return hitbox.Intersects(targetHitbox);
-                        });
+                        return hitbox.canDamage && targetMultiHitbox.CollideRectangle(target, hitbox.BoundingHitbox, needCanBeDamaged: true);
                     }))
                     {
                         return null;
                     }
                     return false;
                 }
-                if (!CollideRectangle(npc, target.Hitbox)) return false;
+                if (!CollideRectangle(npc, target.Hitbox, needCanDamage: true)) return false;
                 return null;
             }
-            if (targetMultiHitbox.useMultipleHitboxes && !targetMultiHitbox.CollideRectangle(target, npc.Hitbox)) return false;
+            if (targetMultiHitbox.useMultipleHitboxes && !targetMultiHitbox.CollideRectangle(target, npc.Hitbox, needCanBeDamaged: true)) return false;
             return null;
         }
 
@@ -752,27 +756,32 @@ namespace MultiHitboxNPCLibrary
                 preModifyDataWidth = npc.width;
                 preModifyDataHeight = npc.height;
             }
+
+            //TODO: Sync for multiplayer here
         }
 
-        public void AssignHitboxFrom(List<Rectangle> rectangles, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
+        public void AssignHitboxFrom(List<RectangleHitboxData> hitboxDatas, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
         {
-            if (rectangles == null)
+            if (hitboxDatas == null)
             {
                 hitboxes = null;
                 return;
             }
 
-            if (hitboxes == null || hitboxes.HitboxCount != rectangles.Count)
+            if (hitboxes == null || hitboxes.HitboxCount != hitboxDatas.Count)
             {
-                hitboxes = MultiHitbox.CreateFrom(rectangles, assignmentMode);
+                hitboxes = MultiHitbox.CreateFrom(hitboxDatas, assignmentMode);
             }
             else
             {
-                for (int i = 0; i < Math.Min(hitboxes.HitboxCount, rectangles.Count); i++)
+                for (int i = 0; i < Math.Min(hitboxes.HitboxCount, hitboxDatas.Count); i++)
                 {
                     RectangleHitbox rectangleHitbox = hitboxes.GetHitbox(i);
-                    rectangleHitbox.hitbox = rectangles[i];
+                    rectangleHitbox.hitbox = hitboxDatas[i].Hitbox ?? rectangleHitbox.hitbox;
+                    rectangleHitbox.canDamage = hitboxDatas[i].CanDamage ?? rectangleHitbox.canDamage;
+                    rectangleHitbox.canBeDamaged = hitboxDatas[i].CanBeDamaged ?? rectangleHitbox.canBeDamaged;
                 }
+                hitboxes.Refresh();
             }
         }
 
