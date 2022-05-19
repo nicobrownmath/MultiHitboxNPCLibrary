@@ -29,7 +29,6 @@ namespace MultiHitboxNPCLibrary
     //This doesn't have much impact on their functionality so it's not a major issue, but I would like to fix it at some point
     //TODO: Produce death sound from (real center? the closest center to the player?)
     //TODO: Mouse hovering
-    //TODO: Multiplayer syncing
     //TODO: Possibly make effects like spectre healing come from the hit segment
     public class MultiHitboxNPC : GlobalNPC
     {
@@ -73,6 +72,37 @@ namespace MultiHitboxNPCLibrary
             IL.Terraria.Item.GetPickedUpByMonsters += Item_GetPickedUpByMonsters;
             IL.Terraria.NPC.BeHurtByOtherNPC += NPC_BeHurtByOtherNPC;
             IL.Terraria.Player.Update_NPCCollision += Player_Update_NPCCollision;
+            IL.Terraria.Main.DrawMouseOver += Main_DrawMouseOver;
+        }
+
+        //adjusts mouseover text
+        private void Main_DrawMouseOver(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            if (!c.TryGotoNext(MoveType.After,
+                i => i.MatchLdloca(0),
+                i => i.MatchLdloc(12),
+                i => i.MatchCall(typeof(Rectangle).GetMethod("Intersects", BindingFlags.Instance | BindingFlags.Public, new Type[] { typeof(Rectangle) })),
+                i => i.MatchStloc(13)
+                ))
+            {
+                GetInstance<MultiHitboxNPCLibrary>().Logger.Debug("Failed to find patch location");
+                return;
+            }
+
+            c.Emit(OpCodes.Ldloc, 13);
+            c.Emit(OpCodes.Ldloc, 0);
+            c.Emit(OpCodes.Ldsfld, typeof(Main).GetField("npc", BindingFlags.Static | BindingFlags.Public));
+            c.Emit(OpCodes.Ldloc, 10);
+            c.Emit(OpCodes.Ldelem_Ref);
+            c.EmitDelegate<Func<bool, Rectangle, NPC, bool>>((defaultValue, mouseRect, npc) =>
+            {
+                if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox) && multiHitbox.useMultipleHitboxes)
+                    return multiHitbox.CollideRectangle(npc, mouseRect);
+                return defaultValue;
+            });
+            c.Emit(OpCodes.Stloc, 13);
         }
 
         //checks if the point is in the rectangle, including boundary points
