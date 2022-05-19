@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -10,8 +11,20 @@ using Terraria.Utilities;
 
 namespace MultiHitboxNPCLibrary
 {
-	public abstract class ANPCHitbox
+	public abstract class ANPCHitbox : ILoadable
     {
+        public static Dictionary<string, ANPCHitbox> fromName = new Dictionary<string, ANPCHitbox>();
+        public void Load(Mod mod)
+        {
+            fromName.Add(GetType().FullName, this);
+        }
+
+        public void Unload()
+        {
+            fromName = null;
+        }
+
+
         public abstract bool Colliding(NPC npc, Func<ANPCHitbox, bool> collisionCheck);
 
         public virtual int HitboxCount { get; } //counts the total number of AABB hitboxes
@@ -43,6 +56,24 @@ namespace MultiHitboxNPCLibrary
         }
 
         public abstract void Refresh();
+
+        public void Write(ModPacket packet)
+        {
+            packet.Write(GetType().FullName);
+            WriteTo(packet);
+        }
+        public virtual void WriteTo(ModPacket packet)
+        {
+            throw new NotImplementedException();
+        }
+        public static ANPCHitbox Read(BinaryReader reader)
+        {
+            return fromName[reader.ReadString()].ReadFrom(reader);
+        }
+        public virtual ANPCHitbox ReadFrom(BinaryReader reader)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     //a basic rectangle hitbox, used as a component of all other hitboxes
@@ -97,6 +128,22 @@ namespace MultiHitboxNPCLibrary
         {
             return this;
         }
+
+        public override void WriteTo(ModPacket packet)
+        {
+            packet.Write(hitbox.X);
+            packet.Write(hitbox.Y);
+            packet.Write(hitbox.Width);
+            packet.Write(hitbox.Height);
+            packet.Write(canDamage);
+            packet.Write(canBeDamaged);
+            packet.Write(index);
+        }
+
+        public override ANPCHitbox ReadFrom(BinaryReader reader)
+        {
+            return new RectangleHitbox(new Rectangle(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()), reader.ReadBoolean(), reader.ReadBoolean(), reader.ReadInt32());
+        }
     }
 
     public interface IMultiHitboxSegmentUpdate
@@ -129,22 +176,12 @@ namespace MultiHitboxNPCLibrary
     public class MultiHitbox : ANPCHitbox
     {
         public List<ANPCHitbox> hitboxes;
-
         int _hitboxCount;
         public override int HitboxCount => _hitboxCount;
 
         public MultiHitbox(List<ANPCHitbox> hitboxes)
         {
             this.hitboxes = hitboxes;
-            canDamage = false;
-            canBeDamaged = false;
-            _hitboxCount = 0;
-            foreach (ANPCHitbox hitbox in hitboxes)
-            {
-                _hitboxCount += hitbox.HitboxCount;
-                if (hitbox.canDamage) canDamage = true;
-                if (hitbox.canBeDamaged) canBeDamaged = true;
-            }
         }
 
         public static ANPCHitbox CreateFrom(List<RectangleHitboxData> hitboxDatas, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
@@ -199,6 +236,7 @@ namespace MultiHitboxNPCLibrary
         {
             canDamage = false;
             canBeDamaged = false;
+            _hitboxCount = 0;
 
             float left = float.MaxValue;
             float right = float.MinValue;
@@ -207,6 +245,8 @@ namespace MultiHitboxNPCLibrary
             foreach (ANPCHitbox subHitbox in hitboxes)
             {
                 subHitbox.Refresh();
+
+                _hitboxCount += subHitbox.HitboxCount;
 
                 if (subHitbox.canDamage) canDamage = true;
                 if (subHitbox.canBeDamaged) canBeDamaged = true;
@@ -261,6 +301,28 @@ namespace MultiHitboxNPCLibrary
                 targetIndex += subHitbox.HitboxCount;
             }
             throw new IndexOutOfRangeException();
+        }
+
+        public override void WriteTo(ModPacket packet)
+        {
+            packet.Write(hitboxes.Count);
+            foreach(ANPCHitbox hitbox in hitboxes)
+            {
+                hitbox.Write(packet);
+            }
+        }
+
+        public override ANPCHitbox ReadFrom(BinaryReader reader)
+        {
+            List<ANPCHitbox> hitboxes = new List<ANPCHitbox>();
+
+            int length = reader.ReadInt32();
+            for (int i = 0; i < length; i++)
+            {
+                hitboxes.Add(Read(reader));
+            }
+
+            return new MultiHitbox(hitboxes);
         }
     }
 }

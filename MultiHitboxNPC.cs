@@ -35,6 +35,9 @@ namespace MultiHitboxNPCLibrary
     {
         public override bool InstancePerEntity => true;
 
+        //why is this not a thing normally
+        public NPC NPC;
+
         public bool useMultipleHitboxes => hitboxes != null;
         public ANPCHitbox hitboxes;
         public RectangleHitbox mostRecentHitbox;
@@ -703,6 +706,8 @@ namespace MultiHitboxNPCLibrary
 
         public override void SetDefaults(NPC npc)
         {
+            NPC = npc;
+
             widthForInteractions = npc.width;
             heightForInteractions = npc.height;
         }
@@ -756,8 +761,6 @@ namespace MultiHitboxNPCLibrary
                 preModifyDataWidth = npc.width;
                 preModifyDataHeight = npc.height;
             }
-
-            //TODO: Sync for multiplayer here
         }
 
         public void AssignHitboxFrom(List<RectangleHitboxData> hitboxDatas, MultiHitboxAssignmentMode assignmentMode = MultiHitboxAssignmentMode.Nested)
@@ -781,8 +784,19 @@ namespace MultiHitboxNPCLibrary
                     rectangleHitbox.canDamage = hitboxDatas[i].CanDamage ?? rectangleHitbox.canDamage;
                     rectangleHitbox.canBeDamaged = hitboxDatas[i].CanBeDamaged ?? rectangleHitbox.canBeDamaged;
                 }
-                hitboxes.Refresh();
             }
+            hitboxes.Refresh();
+
+            //sync hitbox in MP
+            if (Main.netMode == NetmodeID.Server)
+            {
+                ModPacket packet = Mod.GetPacket();
+                packet.Write("MultiHitboxNPCLibrary:SyncNPC");
+                packet.Write(NPC.whoAmI);
+                hitboxes.Write(packet);
+                packet.Send();
+            }
+
         }
 
         //hitbox-drawing method for debugging
@@ -795,4 +809,3 @@ namespace MultiHitboxNPCLibrary
         }
     }
 }
-
