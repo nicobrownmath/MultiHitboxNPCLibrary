@@ -27,15 +27,16 @@ namespace MultiHitboxNPCLibrary
     }
 
     //TODO: Drop rule from the closest segment to the player
+    //TODO: Option for random variation within hitboxes
     public class MultiHitboxDropPerSegment : IItemDropRule
     {
         public List<IItemDropRuleChainAttempt> ChainedRules { get; }
 
-        int chanceDenominator;
-        int chanceNumerator;
-        int minAmount;
-        int maxAmount;
-        int itemId;
+        readonly int chanceDenominator;
+        readonly int chanceNumerator;
+        readonly int minAmount;
+        readonly int maxAmount;
+        readonly int itemId;
 
         public MultiHitboxDropPerSegment(int itemId, int chanceDenominator = 1, int chanceNumerator = 1, int minAmount = 1, int maxAmount = 1)
         {

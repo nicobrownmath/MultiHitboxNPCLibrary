@@ -55,6 +55,9 @@ namespace MultiHitboxNPCLibrary
             return GetHitbox(random.Next(HitboxCount));
         }
 
+        //for use with coins
+        public abstract RectangleHitbox GetClosestHitbox(Vector2 target, Func<ANPCHitbox, bool> admissibilityCheck);
+
         public abstract void Refresh();
 
         public void Write(ModPacket packet)
@@ -143,6 +146,12 @@ namespace MultiHitboxNPCLibrary
         public override ANPCHitbox ReadFrom(BinaryReader reader)
         {
             return new RectangleHitbox(new Rectangle(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt32()), reader.ReadBoolean(), reader.ReadBoolean(), reader.ReadInt32());
+        }
+
+        public override RectangleHitbox GetClosestHitbox(Vector2 target, Func<ANPCHitbox, bool> admissibilityCheck)
+        {
+            if (admissibilityCheck.Invoke(this)) return this;
+            return null;
         }
     }
 
@@ -301,6 +310,33 @@ namespace MultiHitboxNPCLibrary
                 targetIndex += subHitbox.HitboxCount;
             }
             throw new IndexOutOfRangeException();
+        }
+
+        public override RectangleHitbox GetClosestHitbox(Vector2 target, Func<ANPCHitbox, bool> admissibilityCheck)
+        {
+            float minimumDistance = float.PositiveInfinity;
+            RectangleHitbox currentHitbox = null;
+            foreach (ANPCHitbox subHitbox in hitboxes)
+            {
+                if (admissibilityCheck.Invoke(subHitbox))
+                {
+                    float newDistance = subHitbox.BoundingHitbox.Distance(target);
+
+                    //only go on if it's possible for a hitbox contained to be contained in this one
+                    if (newDistance < minimumDistance)
+                    {
+                        RectangleHitbox rectangleHitbox = subHitbox.GetClosestHitbox(target, admissibilityCheck);
+
+                        float length = rectangleHitbox.BoundingHitbox.Distance(target);
+                        if (length < minimumDistance)
+                        {
+                            minimumDistance = length;
+                            currentHitbox = rectangleHitbox;
+                        }
+                    }
+                }
+            }
+            return currentHitbox;
         }
 
         public override void WriteTo(ModPacket packet)

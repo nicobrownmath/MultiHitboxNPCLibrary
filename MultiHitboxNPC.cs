@@ -28,7 +28,6 @@ namespace MultiHitboxNPCLibrary
     //I don't really see how to fix this one without a full rewrite of Javelin code
     //This doesn't have much impact on their functionality so it's not a major issue, but I would like to fix it at some point
     //TODO: Produce death sound from (real center? the closest center to the player?)
-    //TODO: Mouse hovering
     //TODO: Possibly make effects like spectre healing come from the hit segment
     public class MultiHitboxNPC : GlobalNPC
     {
@@ -62,6 +61,8 @@ namespace MultiHitboxNPCLibrary
             On.Terraria.NPC.UpdateNPC_BuffApplyVFX += NPC_UpdateNPC_BuffApplyVFX;
             On.Terraria.NPC.UpdateCollision += NPC_UpdateCollision;
             On.Terraria.NPC.StrikeNPC += NPC_StrikeNPC;
+            On.Terraria.Projectile.Update += Projectile_Update;
+            On.Terraria.NPC.CanBeChasedBy += NPC_CanBeChasedBy;
 
             IL.Terraria.Player.CollideWithNPCs += Player_CollideWithNPCs;
             IL.Terraria.Player.DashMovement += Player_DashMovement;
@@ -73,6 +74,101 @@ namespace MultiHitboxNPCLibrary
             IL.Terraria.NPC.BeHurtByOtherNPC += NPC_BeHurtByOtherNPC;
             IL.Terraria.Player.Update_NPCCollision += Player_Update_NPCCollision;
             IL.Terraria.Main.DrawMouseOver += Main_DrawMouseOver;
+            IL.Terraria.Player.MinionNPCTargetAim += Player_MinionNPCTargetAim1;
+        }
+
+        //modify minion targeting
+        private void Player_MinionNPCTargetAim1(ILContext il)
+        {
+            ILCursor c = new ILCursor(il);
+
+            if (!c.TryGotoNext(MoveType.After,
+                i => i.MatchLdsfld(typeof(Main).GetField("npc", BindingFlags.Static | BindingFlags.Public)),
+                i => i.MatchLdloc(1),
+                i => i.MatchLdelemRef(),
+                i => i.MatchCallvirt(typeof(Entity).GetProperty("Hitbox", BindingFlags.Instance | BindingFlags.Public).GetGetMethod()),
+                i => i.MatchLdloc(0),
+                i => i.MatchCall(typeof(Utils).GetMethod("Distance", BindingFlags.Static | BindingFlags.Public, new Type[] { typeof(Rectangle), typeof(Vector2) }))
+                ))
+            {
+                GetInstance<MultiHitboxNPCLibrary>().Logger.Debug("Failed to find patch location");
+                return;
+            }
+
+            c.Emit(OpCodes.Ldloc, 1);
+            c.EmitDelegate<Func<float, int, float>>((defaultDistance, npcIndex) =>
+            {
+                NPC npc = Main.npc[npcIndex];
+                if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox) && multiHitbox.useMultipleHitboxes)
+                {
+                    return multiHitbox.hitboxes.GetClosestHitbox(Main.MouseWorld, (hitbox) => hitbox.canBeDamaged).BoundingHitbox.Distance(Main.MouseWorld);
+                }
+                return defaultDistance;
+            });
+        }
+
+        //cannot chase NPCs which have no damageable hitboxes
+        private bool NPC_CanBeChasedBy(On.Terraria.NPC.orig_CanBeChasedBy orig, NPC self, object attacker, bool ignoreDontTakeDamage)
+        {
+            if (!orig(self, attacker, ignoreDontTakeDamage))
+            {
+                return false;
+            }
+            else
+            {
+                if (ignoreDontTakeDamage) return true;
+
+                MultiHitboxNPC multiHitbox = self.GetGlobalNPC<MultiHitboxNPC>();
+
+                if (multiHitbox.useMultipleHitboxes) return multiHitbox.hitboxes.canBeDamaged;
+                return true;
+            }
+        }
+
+        //homing projectiles home in on the closest segment
+        private void Projectile_Update(On.Terraria.Projectile.orig_Update orig, Projectile self, int i)
+        {
+            //adjust to center at the closest segment
+            for (int j = 0; j < Main.maxNPCs; j++)
+            {
+                NPC npc = Main.npc[j];
+                if (npc.active && npc.CanBeChasedBy(self))
+                {
+                    MultiHitboxNPC multiHitbox = npc.GetGlobalNPC<MultiHitboxNPC>();
+
+                    if (multiHitbox.useMultipleHitboxes)
+                    {
+                        multiHitbox.doDataReset = true;
+                        multiHitbox.preModifyDataWidth = npc.width;
+                        multiHitbox.preModifyDataHeight = npc.height;
+                        multiHitbox.preModifyDataCenter = npc.Center;
+
+                        Vector2 center = multiHitbox.hitboxes.GetClosestHitbox(self.Center, (hitbox) => hitbox.canBeDamaged).BoundingHitbox.Center.ToVector2();
+                        npc.width = (int)Math.Ceiling(multiHitbox.preModifyDataWidth + Math.Abs(multiHitbox.preModifyDataCenter.X - center.X) * 2);
+                        npc.height = (int)Math.Ceiling(multiHitbox.preModifyDataHeight + Math.Abs(multiHitbox.preModifyDataCenter.Y - center.Y) * 2);
+                        npc.Center = center;
+                    }
+                }
+            }
+
+            orig(self, i);
+
+            for (int j = 0; j < Main.maxNPCs; j++)
+            {
+                NPC npc = Main.npc[j];
+                if (npc.active)
+                {
+                    MultiHitboxNPC multiHitbox = npc.GetGlobalNPC<MultiHitboxNPC>();
+
+                    if (multiHitbox.useMultipleHitboxes && multiHitbox.doDataReset)
+                    {
+                        multiHitbox.doDataReset = false;
+                        npc.width = multiHitbox.preModifyDataWidth;
+                        npc.height = multiHitbox.preModifyDataHeight;
+                        npc.Center = multiHitbox.preModifyDataCenter;
+                    }
+                }
+            }
         }
 
         //adjusts mouseover text
@@ -209,7 +305,6 @@ namespace MultiHitboxNPCLibrary
                     if (multiHitbox.useMultipleHitboxes)
                     {
                         multiHitbox.doDataReset = true;
-                        multiHitbox.preModifyDataCenter = npc.Center;
 
                         RectangleHitbox newHitbox = multiHitbox.hitboxes.GetRandomHitbox(Main.rand);
 
@@ -434,7 +529,6 @@ namespace MultiHitboxNPCLibrary
                 if (multiHitbox.useMultipleHitboxes)
                 {
                     multiHitbox.doDataReset = true;
-                    multiHitbox.preModifyDataCenter = self.Center;
 
                     self.position = multiHitbox.mostRecentHitbox.hitbox.TopLeft();
                     self.width = multiHitbox.mostRecentHitbox.hitbox.Width;
@@ -790,6 +884,8 @@ namespace MultiHitboxNPCLibrary
                 //store hitbox data to be restored after special interactions
                 preModifyDataWidth = npc.width;
                 preModifyDataHeight = npc.height;
+                preModifyDataCenter = npc.Center;
+                doDataReset = false;
             }
         }
 
