@@ -43,9 +43,9 @@ namespace MultiHitboxNPCLibrary
         public int widthForInteractions;
         public int heightForInteractions;
 
-        Vector2 preModifyDataCenter;
-        int preModifyDataWidth;
-        int preModifyDataHeight;
+        public Vector2 preModifyDataCenter { get; private set; }
+        public int preModifyDataWidth { get; private set; }
+        public int preModifyDataHeight { get; private set; }
         bool doDataReset;
 
         public bool doDebugDraws;
