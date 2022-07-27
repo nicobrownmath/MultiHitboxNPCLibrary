@@ -28,7 +28,6 @@ namespace MultiHitboxNPCLibrary
     //I don't really see how to fix this one without a full rewrite of Javelin code
     //This doesn't have much impact on their functionality so it's not a major issue, but I would like to fix it at some point
     //TODO: Produce death sound from (real center? the closest center to the player?)
-    //TODO: Possibly make effects like spectre healing come from the hit segment
     public class MultiHitboxNPC : GlobalNPC
     {
         public override bool InstancePerEntity => true;
@@ -778,6 +777,14 @@ namespace MultiHitboxNPCLibrary
             });
         }
 
+        public static bool CollideWithRectangle(NPC npc, Rectangle collider, bool needCanDamage = false, bool needCanBeDamaged = false)
+        {
+            MultiHitboxNPC multiHitbox;
+            if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
+                return multiHitbox.useMultipleHitboxes ? multiHitbox.CollideRectangle(npc, collider, needCanDamage, needCanBeDamaged) : npc.Hitbox.Intersects(collider);
+            return npc.Hitbox.Intersects(collider);
+        }
+
         public override bool? CanBeHitByItem(NPC npc, Player player, Item item)
         {
             if (useMultipleHitboxes && !CollideRectangle(npc, rememberItemRectangle, needCanBeDamaged: true)) return false;
@@ -790,6 +797,14 @@ namespace MultiHitboxNPCLibrary
             {
                 return hitbox.canBeDamaged && projectile.Colliding(projectileHitbox, hitbox.BoundingHitbox);
             });
+        }
+
+        public static bool CollideWithProjectile(NPC npc, Projectile projectile, Rectangle projectileHitbox)
+        {
+            MultiHitboxNPC multiHitbox;
+            if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
+                return multiHitbox.useMultipleHitboxes ? multiHitbox.CollideProjectile(npc, projectile, projectileHitbox) : npc.Hitbox.Intersects(projectileHitbox);
+            return npc.Hitbox.Intersects(projectileHitbox);
         }
 
         public override bool? CanBeHitByProjectile(NPC npc, Projectile projectile)
