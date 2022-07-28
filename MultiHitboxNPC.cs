@@ -24,9 +24,6 @@ using Terraria.Utilities;
 namespace MultiHitboxNPCLibrary
 {
     //TODO: I should probably provide some documentation
-    //TODO: Javelins and other sticky projectiles break with MultiHitboxNPCs
-    //I don't really see how to fix this one without a full rewrite of Javelin code
-    //This doesn't have much impact on their functionality so it's not a major issue, but I would like to fix it at some point
     //TODO: Produce death sound from (real center? the closest center to the player?)
     public class MultiHitboxNPC : GlobalNPC
     {
@@ -128,24 +125,48 @@ namespace MultiHitboxNPCLibrary
         private void Projectile_Update(On.Terraria.Projectile.orig_Update orig, Projectile self, int i)
         {
             //adjust to center at the closest segment
-            for (int j = 0; j < Main.maxNPCs; j++)
+            if (self.TryGetGlobalProjectile<MultiHitboxNPCLibraryProjectile>(out MultiHitboxNPCLibraryProjectile mhProjectile) && mhProjectile.javelinSticking && mhProjectile.stuckToNPC != -1)
             {
-                NPC npc = Main.npc[j];
-                if (npc.active && npc.CanBeChasedBy(self))
+                //special case for javelins
+                NPC npc = Main.npc[mhProjectile.stuckToNPC];
+                MultiHitboxNPC multiHitbox = npc.GetGlobalNPC<MultiHitboxNPC>();
+
+                if (multiHitbox.useMultipleHitboxes)
                 {
-                    MultiHitboxNPC multiHitbox = npc.GetGlobalNPC<MultiHitboxNPC>();
+                    RectangleHitbox attachHitbox = multiHitbox.hitboxes.GetHitbox(mhProjectile.stuckToHitboxIndex);
 
-                    if (multiHitbox.useMultipleHitboxes)
+                    multiHitbox.doDataReset = true;
+                    multiHitbox.preModifyDataWidth = npc.width;
+                    multiHitbox.preModifyDataHeight = npc.height;
+                    multiHitbox.preModifyDataCenter = npc.Center;
+
+                    Vector2 center = attachHitbox.BoundingHitbox.Center.ToVector2();
+                    npc.width = (int)Math.Ceiling(multiHitbox.preModifyDataWidth + Math.Abs(multiHitbox.preModifyDataCenter.X - center.X) * 2);
+                    npc.height = (int)Math.Ceiling(multiHitbox.preModifyDataHeight + Math.Abs(multiHitbox.preModifyDataCenter.Y - center.Y) * 2);
+                    npc.Center = center;
+                }
+            }
+            else
+            {
+                for (int j = 0; j < Main.maxNPCs; j++)
+                {
+                    NPC npc = Main.npc[j];
+                    if (npc.active && npc.CanBeChasedBy(self))
                     {
-                        multiHitbox.doDataReset = true;
-                        multiHitbox.preModifyDataWidth = npc.width;
-                        multiHitbox.preModifyDataHeight = npc.height;
-                        multiHitbox.preModifyDataCenter = npc.Center;
+                        MultiHitboxNPC multiHitbox = npc.GetGlobalNPC<MultiHitboxNPC>();
 
-                        Vector2 center = multiHitbox.hitboxes.GetClosestHitbox(self.Center, (hitbox) => hitbox.canBeDamaged).BoundingHitbox.Center.ToVector2();
-                        npc.width = (int)Math.Ceiling(multiHitbox.preModifyDataWidth + Math.Abs(multiHitbox.preModifyDataCenter.X - center.X) * 2);
-                        npc.height = (int)Math.Ceiling(multiHitbox.preModifyDataHeight + Math.Abs(multiHitbox.preModifyDataCenter.Y - center.Y) * 2);
-                        npc.Center = center;
+                        if (multiHitbox.useMultipleHitboxes)
+                        {
+                            multiHitbox.doDataReset = true;
+                            multiHitbox.preModifyDataWidth = npc.width;
+                            multiHitbox.preModifyDataHeight = npc.height;
+                            multiHitbox.preModifyDataCenter = npc.Center;
+
+                            Vector2 center = multiHitbox.hitboxes.GetClosestHitbox(self.Center, (hitbox) => hitbox.canBeDamaged).BoundingHitbox.Center.ToVector2();
+                            npc.width = (int)Math.Ceiling(multiHitbox.preModifyDataWidth + Math.Abs(multiHitbox.preModifyDataCenter.X - center.X) * 2);
+                            npc.height = (int)Math.Ceiling(multiHitbox.preModifyDataHeight + Math.Abs(multiHitbox.preModifyDataCenter.Y - center.Y) * 2);
+                            npc.Center = center;
+                        }
                     }
                 }
             }
@@ -793,10 +814,26 @@ namespace MultiHitboxNPCLibrary
 
         public bool CollideProjectile(NPC npc, Projectile projectile, Rectangle projectileHitbox)
         {
-            return hitboxes.Colliding(npc, (hitbox) =>
+            if (!projectile.GetGlobalProjectile<MultiHitboxNPCLibraryProjectile>().badCollision)
             {
-                return hitbox.canBeDamaged && projectile.Colliding(projectileHitbox, hitbox.BoundingHitbox);
-            });
+                return hitboxes.Colliding(npc, (hitbox) =>
+                {
+                    return hitbox.canBeDamaged && projectile.Colliding(projectileHitbox, hitbox.BoundingHitbox);
+                });
+            }
+            else
+            {
+                ICollection<RectangleHitbox> allHitboxes = hitboxes.AllHitboxes();
+                foreach(RectangleHitbox hitbox in allHitboxes)
+                {
+                    if (hitbox.canBeDamaged && projectile.Colliding(projectileHitbox, hitbox.BoundingHitbox))
+                    {
+                        mostRecentHitbox = hitbox;
+                        return true;
+                    }
+                }
+                return false;
+            }
         }
 
         public static bool CollideWithProjectile(NPC npc, Projectile projectile, Rectangle projectileHitbox)
