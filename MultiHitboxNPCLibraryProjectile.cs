@@ -18,14 +18,20 @@ namespace MultiHitboxNPCLibrary
 
         public override void SetDefaults(Projectile projectile)
         {
-            switch(projectile.type)
+            switch (projectile.type)
             {
-                case ProjectileID.BoneJavelin:
+                case ProjectileID.BlackBolt: //onyx blaster has weird collision
+                    badCollision = true;
+                    break;
+                case ProjectileID.BoneJavelin: //vanilla javelins
+                case ProjectileID.StardustCellMinionShot:
                 case ProjectileID.Daybreak:
                     javelinSticking = true;
                     badCollision = true;
                     break;
             }
+
+            if (projectile.aiStyle == 137) badCollision = true; //lightning auras
         }
 
         public override void OnHitNPC(Projectile projectile, NPC target, int damage, float knockback, bool crit)
