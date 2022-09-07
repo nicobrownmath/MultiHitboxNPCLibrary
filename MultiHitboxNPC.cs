@@ -29,6 +29,13 @@ namespace MultiHitboxNPCLibrary
     {
         public override bool InstancePerEntity => true;
 
+        public static HashSet<int> MultiHitboxNPCTypes;
+
+        public override bool AppliesToEntity(NPC entity, bool lateInstantiation)
+        {
+            return MultiHitboxNPCTypes.Contains(entity.type);
+        }
+
         //why is this not a thing normally
         public NPC NPC;
 
@@ -71,6 +78,13 @@ namespace MultiHitboxNPCLibrary
             IL.Terraria.Player.Update_NPCCollision += Player_Update_NPCCollision;
             IL.Terraria.Main.DrawMouseOver += Main_DrawMouseOver;
             IL.Terraria.Player.MinionNPCTargetAim += Player_MinionNPCTargetAim1;
+
+            MultiHitboxNPCTypes = new HashSet<int>();
+        }
+
+        public override void Unload()
+        {
+            MultiHitboxNPCTypes = null;
         }
 
         //modify minion targeting
@@ -114,9 +128,10 @@ namespace MultiHitboxNPCLibrary
             {
                 if (ignoreDontTakeDamage) return true;
 
-                MultiHitboxNPC multiHitbox = self.GetGlobalNPC<MultiHitboxNPC>();
-
-                if (multiHitbox.useMultipleHitboxes) return multiHitbox.hitboxes.canBeDamaged;
+                if (self.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox))
+                {
+                    if (multiHitbox.useMultipleHitboxes) return multiHitbox.hitboxes.canBeDamaged;
+                }
                 return true;
             }
         }
@@ -129,21 +144,22 @@ namespace MultiHitboxNPCLibrary
             {
                 //special case for javelins
                 NPC npc = Main.npc[mhProjectile.stuckToNPC];
-                MultiHitboxNPC multiHitbox = npc.GetGlobalNPC<MultiHitboxNPC>();
-
-                if (multiHitbox.useMultipleHitboxes)
+                if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox))
                 {
-                    RectangleHitbox attachHitbox = multiHitbox.hitboxes.GetHitbox(mhProjectile.stuckToHitboxIndex);
+                    if (multiHitbox.useMultipleHitboxes)
+                    {
+                        RectangleHitbox attachHitbox = multiHitbox.hitboxes.GetHitbox(mhProjectile.stuckToHitboxIndex);
 
-                    multiHitbox.doDataReset = true;
-                    multiHitbox.preModifyDataWidth = npc.width;
-                    multiHitbox.preModifyDataHeight = npc.height;
-                    multiHitbox.preModifyDataCenter = npc.Center;
+                        multiHitbox.doDataReset = true;
+                        multiHitbox.preModifyDataWidth = npc.width;
+                        multiHitbox.preModifyDataHeight = npc.height;
+                        multiHitbox.preModifyDataCenter = npc.Center;
 
-                    Vector2 center = attachHitbox.BoundingHitbox.Center.ToVector2();
-                    npc.width = (int)Math.Ceiling(multiHitbox.preModifyDataWidth + Math.Abs(multiHitbox.preModifyDataCenter.X - center.X) * 2);
-                    npc.height = (int)Math.Ceiling(multiHitbox.preModifyDataHeight + Math.Abs(multiHitbox.preModifyDataCenter.Y - center.Y) * 2);
-                    npc.Center = center;
+                        Vector2 center = attachHitbox.BoundingHitbox.Center.ToVector2();
+                        npc.width = (int)Math.Ceiling(multiHitbox.preModifyDataWidth + Math.Abs(multiHitbox.preModifyDataCenter.X - center.X) * 2);
+                        npc.height = (int)Math.Ceiling(multiHitbox.preModifyDataHeight + Math.Abs(multiHitbox.preModifyDataCenter.Y - center.Y) * 2);
+                        npc.Center = center;
+                    }
                 }
             }
             else
@@ -153,19 +169,20 @@ namespace MultiHitboxNPCLibrary
                     NPC npc = Main.npc[j];
                     if (npc.active && npc.CanBeChasedBy(self))
                     {
-                        MultiHitboxNPC multiHitbox = npc.GetGlobalNPC<MultiHitboxNPC>();
-
-                        if (multiHitbox.useMultipleHitboxes)
+                        if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox))
                         {
-                            multiHitbox.doDataReset = true;
-                            multiHitbox.preModifyDataWidth = npc.width;
-                            multiHitbox.preModifyDataHeight = npc.height;
-                            multiHitbox.preModifyDataCenter = npc.Center;
+                            if (multiHitbox.useMultipleHitboxes)
+                            {
+                                multiHitbox.doDataReset = true;
+                                multiHitbox.preModifyDataWidth = npc.width;
+                                multiHitbox.preModifyDataHeight = npc.height;
+                                multiHitbox.preModifyDataCenter = npc.Center;
 
-                            Vector2 center = multiHitbox.hitboxes.GetClosestHitbox(self.Center, (hitbox) => hitbox.canBeDamaged).BoundingHitbox.Center.ToVector2();
-                            npc.width = (int)Math.Ceiling(multiHitbox.preModifyDataWidth + Math.Abs(multiHitbox.preModifyDataCenter.X - center.X) * 2);
-                            npc.height = (int)Math.Ceiling(multiHitbox.preModifyDataHeight + Math.Abs(multiHitbox.preModifyDataCenter.Y - center.Y) * 2);
-                            npc.Center = center;
+                                Vector2 center = multiHitbox.hitboxes.GetClosestHitbox(self.Center, (hitbox) => hitbox.canBeDamaged).BoundingHitbox.Center.ToVector2();
+                                npc.width = (int)Math.Ceiling(multiHitbox.preModifyDataWidth + Math.Abs(multiHitbox.preModifyDataCenter.X - center.X) * 2);
+                                npc.height = (int)Math.Ceiling(multiHitbox.preModifyDataHeight + Math.Abs(multiHitbox.preModifyDataCenter.Y - center.Y) * 2);
+                                npc.Center = center;
+                            }
                         }
                     }
                 }
@@ -178,14 +195,15 @@ namespace MultiHitboxNPCLibrary
                 NPC npc = Main.npc[j];
                 if (npc.active)
                 {
-                    MultiHitboxNPC multiHitbox = npc.GetGlobalNPC<MultiHitboxNPC>();
-
-                    if (multiHitbox.useMultipleHitboxes && multiHitbox.doDataReset)
+                    if (npc.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox))
                     {
-                        multiHitbox.doDataReset = false;
-                        npc.width = multiHitbox.preModifyDataWidth;
-                        npc.height = multiHitbox.preModifyDataHeight;
-                        npc.Center = multiHitbox.preModifyDataCenter;
+                        if (multiHitbox.useMultipleHitboxes && multiHitbox.doDataReset)
+                        {
+                            multiHitbox.doDataReset = false;
+                            npc.width = multiHitbox.preModifyDataWidth;
+                            npc.height = multiHitbox.preModifyDataHeight;
+                            npc.Center = multiHitbox.preModifyDataCenter;
+                        }
                     }
                 }
             }
@@ -315,7 +333,7 @@ namespace MultiHitboxNPCLibrary
                 GetInstance<MultiHitboxNPCLibrary>().Logger.Debug("Failed to find patch location");
                 return;
             }
-            
+
             //first part of the patch
             c.Emit(OpCodes.Ldarg, 0);
             c.EmitDelegate<Action<NPC>>((npc) =>
@@ -824,7 +842,7 @@ namespace MultiHitboxNPCLibrary
             else
             {
                 ICollection<RectangleHitbox> allHitboxes = hitboxes.AllHitboxes();
-                foreach(RectangleHitbox hitbox in allHitboxes)
+                foreach (RectangleHitbox hitbox in allHitboxes)
                 {
                     if (hitbox.canBeDamaged && projectile.Colliding(projectileHitbox, hitbox.BoundingHitbox))
                     {
