@@ -36,7 +36,7 @@ namespace MultiHitboxNPCLibrary
 
         public override void OnHitNPC(Projectile projectile, NPC target, int damage, float knockback, bool crit)
         {
-            if (target.GetGlobalNPC<MultiHitboxNPC>().useMultipleHitboxes)
+            if (target.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox) && multiHitbox.useMultipleHitboxes)
             {
                 stuckToNPC = target.whoAmI;
                 stuckToHitboxIndex = target.GetGlobalNPC<MultiHitboxNPC>().mostRecentHitbox.index;
