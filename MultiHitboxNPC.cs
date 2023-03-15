@@ -56,28 +56,29 @@ namespace MultiHitboxNPCLibrary
         #region Loading & Patches
         public override void Load()
         {
-            On.Terraria.Collision.CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle += Collision_CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle;
+            Terraria.On_Collision.CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle += Collision_CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle;
 
-            On.Terraria.Player.ItemCheck_MeleeHitNPCs += Player_ItemCheck_MeleeHitNPCs;
-            On.Terraria.NPC.Collision_LavaCollision += NPC_Collision_LavaCollision;
-            On.Terraria.NPC.UpdateNPC_BuffSetFlags += NPC_UpdateNPC_BuffSetFlags;
-            On.Terraria.NPC.UpdateNPC_BuffApplyVFX += NPC_UpdateNPC_BuffApplyVFX;
-            On.Terraria.NPC.UpdateCollision += NPC_UpdateCollision;
-            On.Terraria.NPC.StrikeNPC += NPC_StrikeNPC;
-            On.Terraria.Projectile.Update += Projectile_Update;
-            On.Terraria.NPC.CanBeChasedBy += NPC_CanBeChasedBy;
+            Terraria.On_Player.ItemCheck_MeleeHitNPCs += Player_ItemCheck_MeleeHitNPCs;
+            Terraria.On_NPC.Collision_LavaCollision += NPC_Collision_LavaCollision;
+            Terraria.On_NPC.UpdateNPC_BuffSetFlags += NPC_UpdateNPC_BuffSetFlags;
+            Terraria.On_NPC.UpdateNPC_BuffApplyVFX += NPC_UpdateNPC_BuffApplyVFX;
+            Terraria.On_NPC.UpdateCollision += NPC_UpdateCollision;
+            // TODO: Fix this guy !
+            //Terraria.On_NPC.StrikeNPC += NPC_StrikeNPC;
+            Terraria.On_Projectile.Update += Projectile_Update;
+            Terraria.On_NPC.CanBeChasedBy += NPC_CanBeChasedBy;
 
-            IL.Terraria.Player.CollideWithNPCs += Player_CollideWithNPCs;
-            IL.Terraria.Player.DashMovement += Player_DashMovement;
-            IL.Terraria.Player.JumpMovement += Player_JumpMovement;
-            IL.Terraria.Player.Update += Player_Update;
-            IL.Terraria.GameContent.Shaders.WaterShaderData.DrawWaves += WaterShaderData_DrawWaves;
-            IL.Terraria.NPC.UpdateNPC_Inner += NPC_UpdateNPC_Inner;
-            IL.Terraria.Item.GetPickedUpByMonsters += Item_GetPickedUpByMonsters;
-            IL.Terraria.NPC.BeHurtByOtherNPC += NPC_BeHurtByOtherNPC;
-            IL.Terraria.Player.Update_NPCCollision += Player_Update_NPCCollision;
-            IL.Terraria.Main.DrawMouseOver += Main_DrawMouseOver;
-            IL.Terraria.Player.MinionNPCTargetAim += Player_MinionNPCTargetAim1;
+            //Terraria.IL_Player.CollideWithNPCs += Player_CollideWithNPCs;
+            Terraria.IL_Player.DashMovement += Player_DashMovement;
+            Terraria.IL_Player.JumpMovement += Player_JumpMovement;
+            Terraria.IL_Player.Update += Player_Update;
+            Terraria.GameContent.Shaders.IL_WaterShaderData.DrawWaves += WaterShaderData_DrawWaves;
+            Terraria.IL_NPC.UpdateNPC_Inner += NPC_UpdateNPC_Inner;
+            Terraria.IL_Item.GetPickedUpByMonsters_Money += Item_GetPickedUpByMonsters;
+            Terraria.IL_NPC.BeHurtByOtherNPC += NPC_BeHurtByOtherNPC;
+            Terraria.IL_Player.Update_NPCCollision += Player_Update_NPCCollision;
+            Terraria.IL_Main.DrawMouseOver += Main_DrawMouseOver;
+            Terraria.IL_Player.MinionNPCTargetAim += Player_MinionNPCTargetAim1;
 
             MultiHitboxNPCTypes = new HashSet<int>();
         }
@@ -118,7 +119,7 @@ namespace MultiHitboxNPCLibrary
         }
 
         //cannot chase NPCs which have no damageable hitboxes
-        private bool NPC_CanBeChasedBy(On.Terraria.NPC.orig_CanBeChasedBy orig, NPC self, object attacker, bool ignoreDontTakeDamage)
+        private bool NPC_CanBeChasedBy(Terraria.On_NPC.orig_CanBeChasedBy orig, NPC self, object attacker, bool ignoreDontTakeDamage)
         {
             if (!orig(self, attacker, ignoreDontTakeDamage))
             {
@@ -137,7 +138,7 @@ namespace MultiHitboxNPCLibrary
         }
 
         //homing projectiles home in on the closest segment
-        private void Projectile_Update(On.Terraria.Projectile.orig_Update orig, Projectile self, int i)
+        private void Projectile_Update(Terraria.On_Projectile.orig_Update orig, Projectile self, int i)
         {
             //adjust to center at the closest segment
             if (self.TryGetGlobalProjectile<MultiHitboxNPCLibraryProjectile>(out MultiHitboxNPCLibraryProjectile mhProjectile) && mhProjectile.javelinSticking && mhProjectile.stuckToNPC != -1)
@@ -246,7 +247,7 @@ namespace MultiHitboxNPCLibrary
         }
 
         //A patch that fixes what I think is a bug in vanilla collision for things like zenith in which they don't collide when fully enclosed
-        private bool Collision_CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle(On.Terraria.Collision.orig_CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle orig, Vector2 objectPosition, Vector2 objectDimensions, Vector2 lineStart, Vector2 lineEnd, float lineWidth, ref float collisionPoint)
+        private bool Collision_CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle(Terraria.On_Collision.orig_CheckAABBvLineCollision_Vector2_Vector2_Vector2_Vector2_float_refSingle orig, Vector2 objectPosition, Vector2 objectDimensions, Vector2 lineStart, Vector2 lineEnd, float lineWidth, ref float collisionPoint)
         {
             if (orig(objectPosition, objectDimensions, lineStart, lineEnd, lineWidth, ref collisionPoint)) return true;
             else if (CheckAABBvPoint(objectPosition, objectDimensions, lineStart)) { collisionPoint = 0f; return true; }
@@ -254,7 +255,7 @@ namespace MultiHitboxNPCLibrary
         }
 
         //adjusts tile collision to only use the default hitbox
-        private void NPC_UpdateCollision(On.Terraria.NPC.orig_UpdateCollision orig, NPC self)
+        private void NPC_UpdateCollision(Terraria.On_NPC.orig_UpdateCollision orig, NPC self)
         {
             MultiHitboxNPC multiHitbox;
             if (self.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
@@ -286,7 +287,7 @@ namespace MultiHitboxNPCLibrary
         }
 
         //adjusts buff effects to show up from the main npc
-        private void NPC_UpdateNPC_BuffApplyVFX(On.Terraria.NPC.orig_UpdateNPC_BuffApplyVFX orig, NPC self)
+        private void NPC_UpdateNPC_BuffApplyVFX(Terraria.On_NPC.orig_UpdateNPC_BuffApplyVFX orig, NPC self)
         {
             orig(self);
 
@@ -301,7 +302,7 @@ namespace MultiHitboxNPCLibrary
                     self.Center = oldCenter;
                 }
         }
-        private void NPC_UpdateNPC_BuffSetFlags(On.Terraria.NPC.orig_UpdateNPC_BuffSetFlags orig, NPC self, bool lowerBuffTime)
+        private void NPC_UpdateNPC_BuffSetFlags(Terraria.On_NPC.orig_UpdateNPC_BuffSetFlags orig, NPC self, bool lowerBuffTime)
         {
             MultiHitboxNPC multiHitbox;
             if (self.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
@@ -559,7 +560,7 @@ namespace MultiHitboxNPCLibrary
         }
 
         //adjusts on hit effects (damage numbers and hit sounds)
-        private double NPC_StrikeNPC(On.Terraria.NPC.orig_StrikeNPC orig, NPC self, int Damage, float knockBack, int hitDirection, bool crit, bool noEffect, bool fromNet)
+        private double NPC_StrikeNPC(Terraria.On_NPC.orig_StrikeNPC orig, NPC self, int Damage, float knockBack, int hitDirection, bool crit, bool noEffect, bool fromNet)
         {
             MultiHitboxNPC multiHitbox;
             if (self.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
@@ -665,7 +666,7 @@ namespace MultiHitboxNPCLibrary
         }
 
         //lava collision with custom hitboxes
-        private bool NPC_Collision_LavaCollision(On.Terraria.NPC.orig_Collision_LavaCollision orig, NPC self)
+        private bool NPC_Collision_LavaCollision(Terraria.On_NPC.orig_Collision_LavaCollision orig, NPC self)
         {
             MultiHitboxNPC multiHitbox;
             if (self.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
@@ -801,7 +802,7 @@ namespace MultiHitboxNPCLibrary
 
         //remember our item hitbox for canbehitbyitem checs
         static Rectangle rememberItemRectangle;
-        private void Player_ItemCheck_MeleeHitNPCs(On.Terraria.Player.orig_ItemCheck_MeleeHitNPCs orig, Player self, Item sItem, Rectangle itemRectangle, int originalDamage, float knockBack)
+        private void Player_ItemCheck_MeleeHitNPCs(Terraria.On_Player.orig_ItemCheck_MeleeHitNPCs orig, Player self, Item sItem, Rectangle itemRectangle, int originalDamage, float knockBack)
         {
             rememberItemRectangle = itemRectangle;
             orig(self, sItem, itemRectangle, originalDamage, knockBack);
@@ -874,10 +875,10 @@ namespace MultiHitboxNPCLibrary
             return true;
         }
 
-        public override bool? CanHitNPC(NPC npc, NPC target)
+        public override bool CanHitNPC(NPC npc, NPC target)/* tModPorter Suggestion: Return true instead of null */
         {
             MultiHitboxNPC targetMultiHitbox;
-            if (!target.TryGetGlobalNPC<MultiHitboxNPC>(out targetMultiHitbox)) return null;
+            if (!target.TryGetGlobalNPC<MultiHitboxNPC>(out targetMultiHitbox)) return true;
             if (useMultipleHitboxes)
             {
                 if (targetMultiHitbox.useMultipleHitboxes)
@@ -887,15 +888,15 @@ namespace MultiHitboxNPCLibrary
                         return hitbox.canDamage && targetMultiHitbox.CollideRectangle(target, hitbox.BoundingHitbox, needCanBeDamaged: true);
                     }))
                     {
-                        return null;
+                        return true;
                     }
                     return false;
                 }
                 if (!CollideRectangle(npc, target.Hitbox, needCanDamage: true)) return false;
-                return null;
+                return true;
             }
             if (targetMultiHitbox.useMultipleHitboxes && !targetMultiHitbox.CollideRectangle(target, npc.Hitbox, needCanBeDamaged: true)) return false;
-            return null;
+            return true;
         }
 
         public override void SetDefaults(NPC npc)

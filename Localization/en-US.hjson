@@ -1,7 +1,2 @@
-﻿Mods: {
-	"MultiHitboxNPCLibrary": {
-		"DropConditions": {
-			"MultiHitbox": "Drops per segment"
-		}
-	}
-}
+
+Mods.MultiHitboxNPCLibrary.DropConditions.MultiHitbox: Drops per segment

@@ -34,7 +34,7 @@ namespace MultiHitboxNPCLibrary
             if (projectile.aiStyle == 137) badCollision = true; //lightning auras
         }
 
-        public override void OnHitNPC(Projectile projectile, NPC target, int damage, float knockback, bool crit)
+        public override void OnHitNPC(Projectile projectile, NPC target, NPC.HitInfo hit, int damageDone)
         {
             if (target.TryGetGlobalNPC<MultiHitboxNPC>(out MultiHitboxNPC multiHitbox) && multiHitbox.useMultipleHitboxes)
             {
