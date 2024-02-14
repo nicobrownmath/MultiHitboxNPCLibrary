@@ -560,37 +560,37 @@ namespace MultiHitboxNPCLibrary
         }
 
         //adjusts on hit effects (damage numbers and hit sounds)
-        private double NPC_StrikeNPC(Terraria.On_NPC.orig_StrikeNPC orig, NPC self, int Damage, float knockBack, int hitDirection, bool crit, bool noEffect, bool fromNet)
-        {
-            MultiHitboxNPC multiHitbox;
-            if (self.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
-            {
-                if (multiHitbox.useMultipleHitboxes)
-                {
-                    multiHitbox.doDataReset = true;
+        //private double NPC_StrikeNPC(Terraria.On_NPC.orig_StrikeNPC orig, NPC self, int Damage, float knockBack, int hitDirection, bool crit, bool noEffect, bool fromNet)
+        //{
+        //    MultiHitboxNPC multiHitbox;
+        //    if (self.TryGetGlobalNPC<MultiHitboxNPC>(out multiHitbox))
+        //    {
+        //        if (multiHitbox.useMultipleHitboxes)
+        //        {
+        //            multiHitbox.doDataReset = true;
 
-                    self.position = multiHitbox.mostRecentHitbox.hitbox.TopLeft();
-                    self.width = multiHitbox.mostRecentHitbox.hitbox.Width;
-                    self.height = multiHitbox.mostRecentHitbox.hitbox.Height;
-                }
+        //            self.position = multiHitbox.mostRecentHitbox.hitbox.TopLeft();
+        //            self.width = multiHitbox.mostRecentHitbox.hitbox.Width;
+        //            self.height = multiHitbox.mostRecentHitbox.hitbox.Height;
+        //        }
 
-                double output = orig(self, Damage, knockBack, hitDirection, crit, noEffect, fromNet);
+        //        double output = orig(self, Damage, knockBack, hitDirection, crit, noEffect, fromNet);
 
-                if (multiHitbox.useMultipleHitboxes && multiHitbox.doDataReset)
-                {
-                    multiHitbox.doDataReset = false;
-                    self.width = multiHitbox.preModifyDataWidth;
-                    self.height = multiHitbox.preModifyDataHeight;
-                    self.Center = multiHitbox.preModifyDataCenter;
-                }
+        //        if (multiHitbox.useMultipleHitboxes && multiHitbox.doDataReset)
+        //        {
+        //            multiHitbox.doDataReset = false;
+        //            self.width = multiHitbox.preModifyDataWidth;
+        //            self.height = multiHitbox.preModifyDataHeight;
+        //            self.Center = multiHitbox.preModifyDataCenter;
+        //        }
 
-                return output;
-            }
-            else
-            {
-                return orig(self, Damage, knockBack, hitDirection, crit, noEffect, fromNet);
-            }
-        }
+        //        return output;
+        //    }
+        //    else
+        //    {
+        //        return orig(self, Damage, knockBack, hitDirection, crit, noEffect, fromNet);
+        //    }
+        //}
 
         //ramming mounts + lawnmower
         private void Player_CollideWithNPCs(ILContext il)

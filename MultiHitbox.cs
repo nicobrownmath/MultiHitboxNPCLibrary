@@ -110,15 +110,18 @@ namespace MultiHitboxNPCLibrary
                 {
                     multiHitboxSegmentUpdate.MultiHitboxSegmentUpdate(npc, this);
                 }
-                foreach(Instanced<GlobalNPC> global in npc.Globals)
+
+                foreach(var global in npc.Globals)
                 {
-                    if (global.Instance is IMultiHitboxSegmentUpdate globalMultiHitboxSegmentUpdate)
+                    if (global is IMultiHitboxSegmentUpdate globalMultiHitboxSegmentUpdate)
                     {
                         globalMultiHitboxSegmentUpdate.MultiHitboxSegmentUpdate(npc, this);
                     }
                 }
+
                 return true;
             }
+
             return false;
         }
 
@@ -150,7 +153,8 @@ namespace MultiHitboxNPCLibrary
 
         public override RectangleHitbox GetClosestHitbox(Vector2 target, Func<ANPCHitbox, bool> admissibilityCheck)
         {
-            if (admissibilityCheck.Invoke(this)) return this;
+            if (admissibilityCheck.Invoke(this))
+                return this;
             return null;
         }
     }
